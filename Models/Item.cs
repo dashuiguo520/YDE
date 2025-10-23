@@ -29,6 +29,10 @@ namespace YamlDataEditor.Models
         public int? Buy { get; set; }
 
         [Category("属性")]
+        [Description("出售价格")]
+        public int? Sell { get; set; }
+
+        [Category("属性")]
         [Description("重量")]
         public int? Weight { get; set; }
 

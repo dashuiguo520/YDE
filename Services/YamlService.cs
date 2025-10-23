@@ -495,6 +495,7 @@ namespace YamlDataEditor.Services
                             // item.Defense = defense;
                         }
                         break;
+
                     case "sell":
                         int sell;
                         if (int.TryParse(value?.ToString(), out sell))

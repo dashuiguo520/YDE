@@ -89,6 +89,7 @@ namespace YamlDataEditor.Forms
                 Type = source.Type,
                 SubType = source.SubType,
                 Buy = source.Buy,
+                Sell = source.Sell,
                 Weight = source.Weight,
                 Attack = source.Attack,
                 MagicAttack = source.MagicAttack,

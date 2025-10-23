@@ -319,15 +319,8 @@ namespace YamlDataEditor.Forms
             AddColumn("Name", "名称", 150);
             AddColumn("Type", "类型", 100);
             AddColumn("SubType", "子类型", 100);
-            AddColumn("Buy", "出售价格", 80);
+            AddColumn("Buy", "购买价格", 100);
             AddColumn("Weight", "重量", 80);
-            AddColumn("Attack", "攻击", 80);
-            AddColumn("MagicAttack", "魔攻", 80);
-            AddColumn("Range", "攻击距离", 80);
-            AddColumn("Slots", "插槽", 80);
-            AddColumn("WeaponLevel", "武器等级", 80);
-            AddColumn("EquipLevelMin", "装备等级", 80);
-            AddColumn("Refineable", "可精炼", 80);
         }
 
         private void AddColumn(string dataPropertyName, string headerText, int width)
