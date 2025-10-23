@@ -74,7 +74,19 @@ namespace YamlDataEditor.Forms
         private void SetupPropertyGrid()
         {
             propertyGrid.SelectedObject = EditedItem;
+            // 设置属性网格的属性排序和显示
+            propertyGrid.PropertySort = PropertySort.Categorized;
 
+            // 确保属性网格使用正确的字体
+            propertyGrid.Font = new Font("Microsoft YaHei UI", 9);
+
+            // 设置属性网格的行高以适应多行文本
+            propertyGrid.LargeButtons = false;
+            propertyGrid.ToolbarVisible = true;
+            propertyGrid.HelpVisible = true;
+
+            // 刷新属性网格
+            propertyGrid.Refresh();
 
         }
 
@@ -120,6 +132,8 @@ namespace YamlDataEditor.Forms
                 EquipLevelMin = source.EquipLevelMin,
                 Refineable = source.Refineable,
                 Script = source.Script,
+                EquipScript = source.EquipScript,
+                UnEquipScript = source.UnEquipScript,
                 Trade = new TradeRestrictions
                 {
                     NoDrop = source.Trade.NoDrop,
@@ -127,7 +141,11 @@ namespace YamlDataEditor.Forms
                     NoSell = source.Trade.NoSell,
                     NoStorage = source.Trade.NoStorage,
                     NoVend = source.Trade.NoVend,
-                    NoTradeRoom = source.Trade.NoTradeRoom
+                    NoTradeRoom = source.Trade.NoTradeRoom,
+                    NoCart = source.Trade.NoCart,
+                    NoGuildStorage = source.Trade.NoGuildStorage,
+                    NoMail = source.Trade.NoMail,
+                    NoAuction = source.Trade.NoAuction
                 }
             };
         }

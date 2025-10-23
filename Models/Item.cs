@@ -79,6 +79,16 @@ namespace YamlDataEditor.Models
         [Description("物品脚本")]
         public string Script { get; set; } = string.Empty;
 
+        [Category("脚本")]
+        [Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(System.Drawing.Design.UITypeEditor))]
+        [Description("装备时执行的脚本")]
+        public string EquipScript { get; set; } = string.Empty;
+
+        [Category("脚本")]
+        [Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(System.Drawing.Design.UITypeEditor))]
+        [Description("卸下时执行的脚本")]
+        public string UnEquipScript { get; set; } = string.Empty;
+
         [Category("交易限制")]
         [TypeConverter(typeof(ExpandableObjectConverter))]
         [Description("交易限制")]
@@ -171,6 +181,18 @@ namespace YamlDataEditor.Models
 
         [Description("不可交易室")]
         public bool NoTradeRoom { get; set; }
+
+        [Description("不可放入手推车")]
+        public bool NoCart { get; set; }
+
+        [Description("不可放入公会仓库")]
+        public bool NoGuildStorage { get; set; }
+
+        [Description("不可邮寄")]
+        public bool NoMail { get; set; }
+
+        [Description("不可拍卖")]
+        public bool NoAuction { get; set; }
 
         public override string ToString()
         {

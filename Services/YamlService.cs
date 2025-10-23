@@ -478,6 +478,14 @@ namespace YamlDataEditor.Services
                         item.Script = value?.ToString() ?? "";
                         break;
 
+                    case "equipscript":
+                        item.EquipScript = value?.ToString() ?? "";
+                        break;
+
+                    case "unequipscript":
+                        item.UnEquipScript = value?.ToString() ?? "";
+                        break;
+
                     // ========== 交易限制 ==========
                     case "trade":
                         if (value is IDictionary<object, object> tradeDict)
@@ -592,6 +600,10 @@ namespace YamlDataEditor.Services
                         case "nostorage": trade.NoStorage = tradeBool; break;
                         case "novend": trade.NoVend = tradeBool; break;
                         case "notraderoom": trade.NoTradeRoom = tradeBool; break;
+                        case "nocart": trade.NoCart = tradeBool; break;
+                        case "noguildstorage": trade.NoGuildStorage = tradeBool; break;
+                        case "nomail": trade.NoMail = tradeBool; break;
+                        case "noauction": trade.NoAuction = tradeBool; break;
                     }
                 }
             }
