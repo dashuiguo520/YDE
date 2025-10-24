@@ -12,6 +12,11 @@ namespace YamlDataEditor.Services
         private List<Item> _items = new List<Item>();
         private readonly YamlService _yamlService = new YamlService();
 
+        public void SetItems(List<Item> items)
+        {
+            _items = items ?? new List<Item>();
+        }
+
         // DataService.cs - 修改LoadData方法
         public void LoadData(string filePath, Encoding encoding = null)
         {

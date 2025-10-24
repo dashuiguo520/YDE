@@ -223,51 +223,70 @@ namespace YamlDataEditor.Forms
         }
 
         private Encoding currentFileEncoding = Encoding.UTF8;
-        // Forms/MainForm.cs - 修复数据绑定部分
-        private void OpenButton_Click(object sender, EventArgs e)
+
+        private void UpdateStatusWithEncodingInfo(string message, Encoding encoding)
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action<string, Encoding>(UpdateStatusWithEncodingInfo), message, encoding);
+                return;
+            }
+
+            toolStripStatusLabel.Text = $"{message} (编码: {encoding.EncodingName})";
+        }
+        private async void OpenButton_Click(object sender, EventArgs e)
         {
             using (var dialog = new OpenFileDialog())
             {
                 dialog.Filter = "YAML文件|*.yaml;*.yml|所有文件|*.*";
                 if (dialog.ShowDialog() == DialogResult.OK)
                 {
+                    ProgressDialog progressDialog = null;
+
                     try
                     {
                         Cursor = Cursors.WaitCursor;
 
+                        // 显示编码选择对话框
+                        Encoding selectedEncoding = ShowEncodingSelectionDialog();
+                        if (selectedEncoding == null)
+                        {
+                            return; // 用户取消了操作
+                        }
+
+                        // 创建进度对话框
+                        progressDialog = ProgressDialog.ShowProgress(this, "加载YAML文件");
+
+                        // 订阅取消事件
+                        progressDialog.CancellationRequested += (s, e) =>
+                        {
+                            toolStripStatusLabel.Text = "操作已取消";
+                        };
+
                         // 记录当前文件路径
                         _currentFilePath = dialog.FileName;
 
-                        _dataService.LoadData(dialog.FileName);
-                        _currentItems = _dataService.GetItems();
+                        // 使用后台任务加载数据并更新进度，传入选择的编码
+                        await Task.Run(() => LoadDataWithProgress(dialog.FileName, progressDialog, selectedEncoding));
 
-                        // 修复数据绑定
-                        if (this.InvokeRequired)
-                        {
-                            this.Invoke(new Action(() =>
-                            {
-                                dataGridView.DataSource = new BindingList<Item>(_currentItems);
-                            }));
-                        }
-                        else
-                        {
-                            dataGridView.DataSource = new BindingList<Item>(_currentItems);
-                        }
+                        // 安全关闭对话框
+                        SafeCloseProgressDialog(progressDialog);
+                        progressDialog = null;
 
-                        // 更新筛选下拉框
+                        // 更新UI
+                        UpdateDataGridView();
                         UpdateFilterComboBoxes();
 
-                        // 刷新数据网格显示
-                        dataGridView.Refresh();
-
-                        toolStripStatusLabel.Text = $"成功加载 {_currentItems.Count} 个物品";
-                        MessageBox.Show($"成功加载 {_currentItems.Count} 个物品", "成功",
+                        //toolStripStatusLabel.Text = $"成功加载 {_currentItems.Count} 个物品 (编码: {selectedEncoding.EncodingName})";
+                        UpdateStatusWithEncodingInfo($"成功加载 {_currentItems.Count} 个物品", selectedEncoding);
+                        MessageBox.Show($"成功加载 {_currentItems.Count} 个物品\n使用编码: {selectedEncoding.EncodingName}", "成功",
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                         // 调试信息
                         if (_currentItems.Count > 0)
                         {
                             Console.WriteLine("=== 加载的物品详情 ===");
+                            Console.WriteLine($"使用编码: {selectedEncoding.EncodingName}");
                             foreach (var item in _currentItems.Take(5))
                             {
                                 Console.WriteLine($"ID: {item.Id}, AegisName: {item.AegisName}, Name: {item.Name}");
@@ -275,8 +294,29 @@ namespace YamlDataEditor.Forms
                             Console.WriteLine("... (更多物品已加载)");
                         }
                     }
+                    catch (OperationCanceledException)
+                    {
+                        SafeCloseProgressDialog(progressDialog);
+                        toolStripStatusLabel.Text = "加载已取消";
+                        MessageBox.Show("加载操作已被用户取消", "提示",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                     catch (Exception ex)
                     {
+                        SafeCloseProgressDialog(progressDialog);
+
+                        // 如果是编码问题，提供重新选择编码的选项
+                        if (IsEncodingRelatedError(ex))
+                        {
+                            if (MessageBox.Show($"文件加载失败，可能是编码问题:\n{ex.Message}\n\n是否尝试使用其他编码重新加载？",
+                                "编码问题", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                            {
+                                // 递归调用自身，但跳过编码选择（用户已经知道要重试）
+                                await RetryWithDifferentEncoding(dialog.FileName);
+                                return;
+                            }
+                        }
+
                         string errorMessage = $"加载文件失败:\n\n错误类型: {ex.GetType().Name}\n错误信息: {ex.Message}";
 
                         if (ex.InnerException != null)
@@ -291,10 +331,238 @@ namespace YamlDataEditor.Forms
                     }
                     finally
                     {
+                        SafeCloseProgressDialog(progressDialog);
                         Cursor = Cursors.Default;
                     }
                 }
             }
+        }
+
+        // 新增：显示编码选择对话框
+        private Encoding ShowEncodingSelectionDialog()
+        {
+            using (var encodingDialog = new EncodingSelectionDialog())
+            {
+                // 设置默认选择为GB2312，因为这是常见的中文编码
+                var gb2312Item = encodingDialog.encodingComboBox.Items
+                    .OfType<EncodingSelectionDialog.EncodingItem>()
+                    .FirstOrDefault(item => item.Encoding.BodyName.Contains("gb2312"));
+
+                if (gb2312Item != null)
+                {
+                    encodingDialog.encodingComboBox.SelectedItem = gb2312Item;
+                }
+
+                if (encodingDialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    return encodingDialog.SelectedEncoding;
+                }
+            }
+            return null;
+        }
+
+        // 新增：判断是否是编码相关的错误
+        private bool IsEncodingRelatedError(Exception ex)
+        {
+            var errorMessage = ex.Message.ToLower();
+            var encodingErrors = new[]
+            {
+        "encoding", "编码", "gb2312", "gbk", "utf", "character", "字符",
+        "invalid", "无效", "cannot", "无法", "decode", "解码"
+    };
+
+            return encodingErrors.Any(error => errorMessage.Contains(error));
+        }
+
+        // 新增：使用不同编码重试加载
+        private async Task RetryWithDifferentEncoding(string filePath)
+        {
+            ProgressDialog progressDialog = null;
+
+            try
+            {
+                Cursor = Cursors.WaitCursor;
+
+                // 再次显示编码选择对话框
+                Encoding selectedEncoding = ShowEncodingSelectionDialog();
+                if (selectedEncoding == null) return;
+
+                progressDialog = ProgressDialog.ShowProgress(this, "重新加载YAML文件");
+
+                // 使用新的编码重新加载
+                await Task.Run(() => LoadDataWithProgress(filePath, progressDialog, selectedEncoding));
+
+                SafeCloseProgressDialog(progressDialog);
+
+                // 更新UI
+                UpdateDataGridView();
+                UpdateFilterComboBoxes();
+
+                toolStripStatusLabel.Text = $"重新加载成功 {_currentItems.Count} 个物品 (编码: {selectedEncoding.EncodingName})";
+                MessageBox.Show($"重新加载成功！\n使用编码: {selectedEncoding.EncodingName}", "成功",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                SafeCloseProgressDialog(progressDialog);
+                MessageBox.Show($"重新加载失败: {ex.Message}", "错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                SafeCloseProgressDialog(progressDialog);
+                Cursor = Cursors.Default;
+            }
+        }
+
+        // 修改：在LoadDataWithProgress方法中接受编码参数
+        private void LoadDataWithProgress(string filePath, ProgressDialog progressDialog, Encoding encoding = null)
+        {
+            try
+            {
+                // 步骤1: 初始化进度
+                progressDialog.UpdateProgress(0, 100, "正在初始化...");
+                progressDialog.CheckForCancellation();
+                Thread.Sleep(100);
+
+                // 步骤2: 读取文件内容（使用指定的编码）
+                progressDialog.UpdateProgress(20, 100, $"正在读取文件(编码: {encoding?.EncodingName ?? "自动检测"})...");
+                progressDialog.CheckForCancellation();
+
+                // 如果指定了编码，使用指定编码；否则自动检测
+                var finalEncoding = encoding ?? DetectFileEncoding(filePath);
+                var yamlContent = File.ReadAllText(filePath, finalEncoding);
+
+                // 记录使用的编码信息
+                Console.WriteLine($"最终使用的文件编码: {finalEncoding.EncodingName}");
+                Console.WriteLine($"文件内容前500字符: {yamlContent.Substring(0, Math.Min(500, yamlContent.Length))}");
+
+                Thread.Sleep(200);
+
+                // 步骤3: 解析YAML结构
+                progressDialog.UpdateProgress(40, 100, "正在解析YAML结构...");
+                progressDialog.CheckForCancellation();
+                var yamlService = new YamlService();
+                var items = yamlService.ParseYamlContentWithProgress(yamlContent, progressDialog);
+
+                // 步骤4: 处理数据
+                progressDialog.UpdateProgress(90, 100, "正在处理数据...");
+                progressDialog.CheckForCancellation();
+                _currentItems = items;
+                _dataService.SetItems(items);
+                Thread.Sleep(100);
+
+                // 步骤5: 完成
+                progressDialog.UpdateProgress(100, 100, "加载完成!");
+            }
+            catch (Exception ex)
+            {
+                progressDialog.SetStatus($"加载失败: {ex.Message}");
+                throw;
+            }
+        }
+
+        // 添加安全关闭进度对话框的方法
+        private void SafeCloseProgressDialog(ProgressDialog dialog)
+        {
+            if (dialog != null && !dialog.IsDisposed)
+            {
+                try
+                {
+                    if (dialog.InvokeRequired)
+                    {
+                        dialog.Invoke(new Action(() =>
+                        {
+                            dialog.Close();
+                            dialog.Dispose();
+                        }));
+                    }
+                    else
+                    {
+                        dialog.Close();
+                        dialog.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"关闭进度对话框时出错: {ex.Message}");
+                }
+            }
+        }
+
+        private void LoadDataWithProgress(string filePath, ProgressDialog progressDialog)
+        {
+            try
+            {
+                // 步骤1: 初始化进度
+                progressDialog.UpdateProgress(0, 100, "正在初始化...");
+                progressDialog.CheckForCancellation(); // 检查取消
+                Thread.Sleep(100);
+
+                // 步骤2: 读取文件内容
+                progressDialog.UpdateProgress(20, 100, "正在读取文件...");
+                progressDialog.CheckForCancellation();
+                var encoding = DetectFileEncoding(filePath);
+                var yamlContent = File.ReadAllText(filePath, encoding);
+                Thread.Sleep(200);
+
+                // 步骤3: 解析YAML结构
+                progressDialog.UpdateProgress(40, 100, "正在解析YAML结构...");
+                progressDialog.CheckForCancellation();
+                var yamlService = new YamlService();
+                var items = yamlService.ParseYamlContentWithProgress(yamlContent, progressDialog);
+
+                // 步骤4: 处理数据
+                progressDialog.UpdateProgress(90, 100, "正在处理数据...");
+                progressDialog.CheckForCancellation();
+                _currentItems = items;
+                _dataService.SetItems(items);
+                Thread.Sleep(100);
+
+                // 步骤5: 完成
+                progressDialog.UpdateProgress(100, 100, "加载完成!");
+            }
+            catch (Exception ex)
+            {
+                progressDialog.SetStatus($"加载失败: {ex.Message}");
+                throw;
+            }
+        }
+
+        // 新增：文件编码检测方法（从YamlService移过来）
+        private Encoding DetectFileEncoding(string filePath)
+        {
+            try
+            {
+                var bom = new byte[4];
+                using (var file = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                {
+                    file.Read(bom, 0, 4);
+                }
+
+                if (bom[0] == 0xef && bom[1] == 0xbb && bom[2] == 0xbf) return Encoding.UTF8;
+                if (bom[0] == 0xff && bom[1] == 0xfe) return Encoding.Unicode;
+                if (bom[0] == 0xfe && bom[1] == 0xff) return Encoding.BigEndianUnicode;
+
+                return Encoding.UTF8;
+            }
+            catch
+            {
+                return Encoding.UTF8;
+            }
+        }
+
+        // 新增：更新数据网格视图的方法
+        private void UpdateDataGridView()
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(UpdateDataGridView));
+                return;
+            }
+
+            dataGridView.DataSource = new BindingList<Item>(_currentItems);
+            dataGridView.Refresh();
         }
 
         // 修复数据网格设置
