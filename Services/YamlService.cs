@@ -54,7 +54,6 @@ namespace YamlDataEditor.Services
                 }
 
                 // 检测BOM标记
-                if (bom[0] == 0x2b && bom[1] == 0x2f && bom[2] == 0x76) return Encoding.UTF7;
                 if (bom[0] == 0xef && bom[1] == 0xbb && bom[2] == 0xbf) return Encoding.UTF8;
                 if (bom[0] == 0xff && bom[1] == 0xfe) return Encoding.Unicode; //UTF-16LE
                 if (bom[0] == 0xfe && bom[1] == 0xff) return Encoding.BigEndianUnicode; //UTF-16BE
@@ -67,11 +66,11 @@ namespace YamlDataEditor.Services
                     // 尝试常见的中文编码
                     var encodings = new Encoding[]
                     {
-                Encoding.UTF8,
-                Encoding.GetEncoding("GB2312"),
-                Encoding.GetEncoding("GBK"),
-                Encoding.GetEncoding("GB18030"),
-                Encoding.GetEncoding("Big5") // 繁体中文
+                        Encoding.UTF8,
+                        Encoding.GetEncoding("GB2312"),
+                        Encoding.GetEncoding("GBK"),
+                        Encoding.GetEncoding("GB18030"),
+                        Encoding.GetEncoding("Big5") // 繁体中文
                     };
 
                     foreach (var encoding in encodings)
@@ -202,8 +201,7 @@ namespace YamlDataEditor.Services
             }
         }
 
-        // 添加缺失的SetPropertyFromDynamic方法
-        // 修复SetPropertyFromDynamic方法中的变量使用问题
+
         private void SetPropertyFromDynamic(Item item, System.Reflection.PropertyInfo prop, dynamic dynamicData)
         {
             try

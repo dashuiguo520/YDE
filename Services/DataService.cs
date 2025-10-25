@@ -13,36 +13,11 @@ namespace YamlDataEditor.Services
         private readonly YamlService _yamlService = new YamlService();
 
         // DataService.cs - 修改LoadData方法
-        public void LoadData(string filePath, Encoding encoding = null)
+        public void LoadData(string filePath, Encoding? encoding = null)
         {
-            try
-            {
                 _items = _yamlService.LoadFromFile(filePath, encoding);
                 Console.WriteLine($"数据服务: 成功加载 {_items.Count} 个物品");
 
-                // 验证加载的数据
-                if (_items.Count > 0)
-                {
-                    var firstItem = _items.First();
-                    Console.WriteLine($"第一个物品: ID={firstItem.Id}, Name={firstItem.Name}, AegisName={firstItem.AegisName}");
-
-                    // 检查中文显示
-                    if (!string.IsNullOrEmpty(firstItem.Name))
-                    {
-                        Console.WriteLine($"名称显示测试: '{firstItem.Name}'");
-                        foreach (char c in firstItem.Name)
-                        {
-                            Console.WriteLine($"字符: {c} (Unicode: {(int)c:X4})");
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"数据服务加载失败: {ex.Message}");
-                _items = new List<Item>();
-                throw;
-            }
         }
 
         public void SaveData(string filePath)

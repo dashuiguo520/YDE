@@ -17,7 +17,7 @@ namespace YamlDataEditor.Forms
 
         private void InitializeComponent()
         {
-            this.SuspendLayout();
+
             this.Text = "物品编辑器";
             this.Size = new Size(500, 600);
             this.StartPosition = FormStartPosition.CenterParent;
@@ -38,7 +38,9 @@ namespace YamlDataEditor.Forms
                 Dock = DockStyle.Fill,
                 SelectedObject = EditedItem,
                 ToolbarVisible = true,
-                HelpVisible = true
+                HelpVisible = true,
+                PropertySort = PropertySort.Categorized,
+                Font = new Font("Microsoft YaHei UI", 9)
             };
 
             // 按钮面板
@@ -79,11 +81,6 @@ namespace YamlDataEditor.Forms
 
             // 确保属性网格使用正确的字体
             propertyGrid.Font = new Font("Microsoft YaHei UI", 9);
-
-            // 设置属性网格的行高以适应多行文本
-            propertyGrid.LargeButtons = false;
-            propertyGrid.ToolbarVisible = true;
-            propertyGrid.HelpVisible = true;
 
             // 刷新属性网格
             propertyGrid.Refresh();

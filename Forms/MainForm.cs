@@ -78,68 +78,74 @@ namespace YamlDataEditor.Forms
             {
                 Dock = DockStyle.Top,
                 Height = 50,
-                BackColor = SystemColors.ControlLight
+                BackColor = SystemColors.ControlLight,
+                Padding = new Padding(10, 10, 10, 0)
             };
 
-            // 搜索文本框
+            // 搜索文本框 - 加大长度，放在最左侧
             txtSearch = new TextBox
             {
-                Location = new Point(10, 15),
-                Size = new Size(150, 20),
-                PlaceholderText = "搜索名称或Aegis名称"
+                Location = new Point(10, 15), // 从10开始，没有标签
+                Size = new Size(200, 23),     // 进一步加大长度
+                PlaceholderText = "搜索名称或Aegis名称", // 修改提示文本
+                Font = new Font("Microsoft YaHei UI", 9)
             };
             txtSearch.KeyPress += (s, e) => { if (e.KeyChar == (char)Keys.Enter) ApplyFilter(); };
 
-            // 类型筛选
+            // 类型筛选 - 增加长度
             cmbType = new ComboBox
             {
-                Location = new Point(170, 15),
-                Size = new Size(120, 20),
-                DropDownStyle = ComboBoxStyle.DropDownList
+                Location = new Point(220, 15), // 10 + 200 + 10 = 220
+                Size = new Size(150, 23),      // 增加到150
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Microsoft YaHei UI", 9)
             };
+            // 添加提示文本
+            cmbType.Items.Add("选择类型");
+            cmbType.SelectedIndex = 0;
 
-            // 子类型筛选
+            // 子类型筛选 - 增加长度
             cmbSubType = new ComboBox
             {
-                Location = new Point(300, 15),
-                Size = new Size(120, 20),
-                DropDownStyle = ComboBoxStyle.DropDownList
+                Location = new Point(380, 15), // 220 + 150 + 10 = 380
+                Size = new Size(150, 23),      // 增加到150
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Microsoft YaHei UI", 9)
             };
+            // 添加提示文本
+            cmbSubType.Items.Add("选择子类型");
+            cmbSubType.SelectedIndex = 0;
 
             // 筛选按钮
             btnFilter = new Button
             {
-                Location = new Point(430, 14),
-                Size = new Size(60, 23),
-                Text = "筛选"
+                Location = new Point(540, 14), // 380 + 150 + 10 = 540
+                Size = new Size(70, 30),       // 稍微调整宽度
+                Text = "筛选",
+                Font = new Font("Microsoft YaHei UI", 9)
             };
             btnFilter.Click += (s, e) => ApplyFilter();
 
             // 清除筛选按钮
             btnClearFilter = new Button
             {
-                Location = new Point(500, 14),
-                Size = new Size(60, 23),
-                Text = "清除"
+                Location = new Point(620, 14), // 540 + 70 + 10 = 620
+                Size = new Size(70, 30),       // 稍微调整宽度
+                Text = "清除",
+                Font = new Font("Microsoft YaHei UI", 9)
             };
             btnClearFilter.Click += (s, e) => ClearFilter();
 
             panelSearch.Controls.AddRange(new Control[] {
-                new Label { Text = "搜索:", Location = new Point(10, 0), Size = new Size(40, 13) },
                 txtSearch,
-                new Label { Text = "类型:", Location = new Point(170, 0), Size = new Size(40, 13) },
                 cmbType,
-                new Label { Text = "子类型:", Location = new Point(300, 0), Size = new Size(50, 13) },
                 cmbSubType,
                 btnFilter,
                 btnClearFilter
             });
 
             // 工具栏
-            toolStrip = new ToolStrip
-            {
-                Dock = DockStyle.Top
-            };
+            toolStrip = new ToolStrip { Dock = DockStyle.Top };
 
             // 数据网格
             dataGridView = new DataGridView
@@ -149,7 +155,8 @@ namespace YamlDataEditor.Forms
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                Font = new Font("Microsoft YaHei UI", 9) // 设置数据网格字体
             };
             dataGridView.CellDoubleClick += DataGridView_CellDoubleClick;
 
@@ -222,8 +229,7 @@ namespace YamlDataEditor.Forms
             }
         }
 
-        private Encoding currentFileEncoding = Encoding.UTF8;
-        // Forms/MainForm.cs - 修复数据绑定部分
+
         private void OpenButton_Click(object sender, EventArgs e)
         {
             using (var dialog = new OpenFileDialog())
@@ -241,18 +247,7 @@ namespace YamlDataEditor.Forms
                         _dataService.LoadData(dialog.FileName);
                         _currentItems = _dataService.GetItems();
 
-                        // 修复数据绑定
-                        if (this.InvokeRequired)
-                        {
-                            this.Invoke(new Action(() =>
-                            {
-                                dataGridView.DataSource = new BindingList<Item>(_currentItems);
-                            }));
-                        }
-                        else
-                        {
-                            dataGridView.DataSource = new BindingList<Item>(_currentItems);
-                        }
+                        dataGridView.DataSource = new BindingList<Item>(_currentItems);
 
                         // 更新筛选下拉框
                         UpdateFilterComboBoxes();
