@@ -200,16 +200,12 @@ namespace YamlDataEditor.Forms
             var refreshButton = new ToolStripButton("刷新");
             refreshButton.Click += RefreshButton_Click;
 
-            var debugButton = new ToolStripButton("调试");
-            debugButton.Click += DebugButton_Click;
-
             toolStrip.Items.Add(btnLoad);
             toolStrip.Items.Add(new ToolStripSeparator());
             toolStrip.Items.Add(addButton);
             toolStrip.Items.Add(deleteButton);
             toolStrip.Items.Add(new ToolStripSeparator());
             toolStrip.Items.Add(refreshButton);
-            toolStrip.Items.Add(debugButton);
         }
 
         private void LoadButton_Click(object sender, EventArgs e)
@@ -323,9 +319,6 @@ namespace YamlDataEditor.Forms
             try
             {
                 Encoding encoding = GetEncodingFromSettings();
-
-                // 先诊断YAML结构
-                DiagnoseYamlStructure(mainFilePath);
 
                 // 尝试使用新的结构化加载方法
                 var (mainItems, importPaths) = _dataService.LoadStructuredFile(mainFilePath, encoding);
@@ -501,63 +494,6 @@ namespace YamlDataEditor.Forms
             catch (Exception ex)
             {
                 Console.WriteLine($"解析Footer和Imports时出错: {ex.Message}");
-            }
-        }
-
-        private void DiagnoseYamlStructure(string filePath)
-        {
-            try
-            {
-                Console.WriteLine($"=== 诊断YAML结构: {filePath} ===");
-                var yamlContent = File.ReadAllText(filePath, Encoding.UTF8);
-
-                using (var reader = new StringReader(yamlContent))
-                {
-                    var yamlStream = new YamlDotNet.RepresentationModel.YamlStream();
-                    yamlStream.Load(reader);
-
-                    if (yamlStream.Documents.Count > 0)
-                    {
-                        var rootNode = yamlStream.Documents[0].RootNode;
-                        DiagnoseYamlNode(rootNode, 0);
-                    }
-                }
-                Console.WriteLine("=== 诊断结束 ===");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"诊断失败: {ex.Message}");
-            }
-        }
-
-        private void DiagnoseYamlNode(YamlDotNet.RepresentationModel.YamlNode node, int depth)
-        {
-            var indent = new string(' ', depth * 2);
-
-            if (node is YamlDotNet.RepresentationModel.YamlScalarNode scalarNode)
-            {
-                Console.WriteLine($"{indent}标量: {scalarNode.Value}");
-            }
-            else if (node is YamlDotNet.RepresentationModel.YamlMappingNode mappingNode)
-            {
-                Console.WriteLine($"{indent}映射 (子节点数: {mappingNode.Children.Count}):");
-                foreach (var child in mappingNode.Children)
-                {
-                    var key = (YamlDotNet.RepresentationModel.YamlScalarNode)child.Key;
-                    Console.WriteLine($"{indent}  键: {key.Value}");
-                    DiagnoseYamlNode(child.Value, depth + 2);
-                }
-            }
-            else if (node is YamlDotNet.RepresentationModel.YamlSequenceNode sequenceNode)
-            {
-                Console.WriteLine($"{indent}序列 (项数: {sequenceNode.Children.Count}):");
-                int index = 0;
-                foreach (var child in sequenceNode.Children)
-                {
-                    Console.WriteLine($"{indent}  项[{index}]:");
-                    DiagnoseYamlNode(child, depth + 2);
-                    index++;
-                }
             }
         }
 
