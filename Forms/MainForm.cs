@@ -671,31 +671,6 @@ namespace YamlDataEditor.Forms
             }
         }
 
-        private void DebugButton_Click(object sender, EventArgs e)
-        {
-            // 从设置文件获取数据库路径
-            string databasePath = GetDatabasePathFromSettings();
-
-            if (string.IsNullOrEmpty(databasePath) || !Directory.Exists(databasePath))
-            {
-                MessageBox.Show("数据库路径未设置或不存在，请先配置系统设置", "错误",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            string mainFilePath = Path.Combine(databasePath, "item_db.yml");
-
-            if (!File.Exists(mainFilePath))
-            {
-                MessageBox.Show($"找不到主文件: {mainFilePath}", "错误",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            DebugService.AnalyzeYamlStructure(mainFilePath);
-            DebugService.TestYamlParsing(mainFilePath);
-        }
-
         // 修复数据网格设置
         private void SetupDataGridView()
         {
