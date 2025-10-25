@@ -10,7 +10,8 @@ namespace YamlDataEditor
             ApplicationConfiguration.Initialize();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+            // Æô¶¯Ö÷ÈÝÆ÷´°Ìå
+            Application.Run(new MainContainerForm());
         }
     }
 }
