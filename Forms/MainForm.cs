@@ -1,9 +1,16 @@
-﻿
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using YamlDataEditor.Models;
 using YamlDataEditor.Services;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
+using static YamlDataEditor.Services.YamlService;
 
 namespace YamlDataEditor.Forms
 {
@@ -20,20 +27,18 @@ namespace YamlDataEditor.Forms
         private Button btnClearFilter;
         private StatusStrip statusStrip;
         private ToolStripStatusLabel toolStripStatusLabel;
+        private ToolStripButton btnLoad;
 
-        // 添加当前文件路径字段
-        private string _currentFilePath;
+        // 当前文件路径列表
+        private List<string> _currentFilePaths = new List<string>();
 
         public MainForm()
         {
             InitializeComponent();
             _dataService = new DataService();
             _currentItems = new List<Item>();
-            _currentFilePath = string.Empty; // 初始化文件路径
 
-            // 设置编码支持
             SetupEncodingSupport();
-
             SetupControls();
             SetupDataGridView();
             SetupToolStrip();
@@ -82,45 +87,43 @@ namespace YamlDataEditor.Forms
                 Padding = new Padding(10, 10, 10, 0)
             };
 
-            // 搜索文本框 - 加大长度，放在最左侧
+            // 搜索文本框
             txtSearch = new TextBox
             {
-                Location = new Point(10, 15), // 从10开始，没有标签
-                Size = new Size(200, 23),     // 进一步加大长度
-                PlaceholderText = "搜索名称或Aegis名称", // 修改提示文本
+                Location = new Point(10, 15),
+                Size = new Size(200, 23),
+                PlaceholderText = "搜索名称或Aegis名称",
                 Font = new Font("Microsoft YaHei UI", 9)
             };
             txtSearch.KeyPress += (s, e) => { if (e.KeyChar == (char)Keys.Enter) ApplyFilter(); };
 
-            // 类型筛选 - 增加长度
+            // 类型筛选
             cmbType = new ComboBox
             {
-                Location = new Point(220, 15), // 10 + 200 + 10 = 220
-                Size = new Size(150, 23),      // 增加到150
+                Location = new Point(220, 15),
+                Size = new Size(150, 23),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Microsoft YaHei UI", 9)
             };
-            // 添加提示文本
             cmbType.Items.Add("选择类型");
             cmbType.SelectedIndex = 0;
 
-            // 子类型筛选 - 增加长度
+            // 子类型筛选
             cmbSubType = new ComboBox
             {
-                Location = new Point(380, 15), // 220 + 150 + 10 = 380
-                Size = new Size(150, 23),      // 增加到150
+                Location = new Point(380, 15),
+                Size = new Size(150, 23),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Microsoft YaHei UI", 9)
             };
-            // 添加提示文本
             cmbSubType.Items.Add("选择子类型");
             cmbSubType.SelectedIndex = 0;
 
             // 筛选按钮
             btnFilter = new Button
             {
-                Location = new Point(540, 14), // 380 + 150 + 10 = 540
-                Size = new Size(70, 30),       // 稍微调整宽度
+                Location = new Point(540, 14),
+                Size = new Size(70, 30),
                 Text = "筛选",
                 Font = new Font("Microsoft YaHei UI", 9)
             };
@@ -129,8 +132,8 @@ namespace YamlDataEditor.Forms
             // 清除筛选按钮
             btnClearFilter = new Button
             {
-                Location = new Point(620, 14), // 540 + 70 + 10 = 620
-                Size = new Size(70, 30),       // 稍微调整宽度
+                Location = new Point(620, 14),
+                Size = new Size(70, 30),
                 Text = "清除",
                 Font = new Font("Microsoft YaHei UI", 9)
             };
@@ -156,7 +159,7 @@ namespace YamlDataEditor.Forms
                 AllowUserToDeleteRows = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                Font = new Font("Microsoft YaHei UI", 9) // 设置数据网格字体
+                Font = new Font("Microsoft YaHei UI", 9)
             };
             dataGridView.CellDoubleClick += DataGridView_CellDoubleClick;
 
@@ -181,17 +184,12 @@ namespace YamlDataEditor.Forms
             cmbSubType.SelectedIndex = 0;
         }
 
-        // 修改SetupToolStrip方法，确保有保存按钮
+        // 修改SetupToolStrip方法，移除打开和另存为，增加加载按钮
         private void SetupToolStrip()
         {
-            var openButton = new ToolStripButton("打开");
-            openButton.Click += OpenButton_Click;
-
-            var saveButton = new ToolStripButton("保存");
-            saveButton.Click += SaveButton_Click;
-
-            var saveAsButton = new ToolStripButton("另存为");
-            saveAsButton.Click += SaveAsButton_Click;
+            // 移除打开和另存为按钮，增加加载按钮
+            btnLoad = new ToolStripButton("加载");
+            btnLoad.Click += LoadButton_Click;
 
             var addButton = new ToolStripButton("添加");
             addButton.Click += AddButton_Click;
@@ -205,9 +203,7 @@ namespace YamlDataEditor.Forms
             var debugButton = new ToolStripButton("调试");
             debugButton.Click += DebugButton_Click;
 
-            toolStrip.Items.Add(openButton);
-            toolStrip.Items.Add(saveButton);
-            toolStrip.Items.Add(saveAsButton);
+            toolStrip.Items.Add(btnLoad);
             toolStrip.Items.Add(new ToolStripSeparator());
             toolStrip.Items.Add(addButton);
             toolStrip.Items.Add(deleteButton);
@@ -216,80 +212,552 @@ namespace YamlDataEditor.Forms
             toolStrip.Items.Add(debugButton);
         }
 
-        private void DebugButton_Click(object sender, EventArgs e)
+        private void LoadButton_Click(object sender, EventArgs e)
         {
-            using (var dialog = new OpenFileDialog())
+            try
             {
-                dialog.Filter = "YAML文件|*.yaml;*.yml";
-                if (dialog.ShowDialog() == DialogResult.OK)
+                Cursor = Cursors.WaitCursor;
+                toolStripStatusLabel.Text = "正在加载数据...";
+
+                // 从设置文件获取数据库路径
+                string databasePath = GetDatabasePathFromSettings();
+
+                if (string.IsNullOrEmpty(databasePath) || !Directory.Exists(databasePath))
                 {
-                    DebugService.AnalyzeYamlStructure(dialog.FileName);
-                    DebugService.TestYamlParsing(dialog.FileName); // 新增测试
+                    MessageBox.Show("数据库路径未设置或不存在，请先配置系统设置", "错误",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    toolStripStatusLabel.Text = "加载失败：路径未设置";
+                    return;
+                }
+
+                // 查找并加载所有相关的YAML文件
+                LoadAllItemFiles(databasePath);
+
+                // 更新筛选下拉框
+                UpdateFilterComboBoxes();
+
+                // 刷新数据网格显示
+                dataGridView.Refresh();
+
+                toolStripStatusLabel.Text = $"成功加载 {_currentItems.Count} 个物品，来自 {_currentFilePaths.Count} 个文件";
+                MessageBox.Show($"成功加载 {_currentItems.Count} 个物品，来自 {_currentFilePaths.Count} 个文件", "成功",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                // 调试信息
+                if (_currentItems.Count > 0)
+                {
+                    Console.WriteLine("=== 加载的物品详情 ===");
+                    foreach (var item in _currentItems.Take(5))
+                    {
+                        Console.WriteLine($"ID: {item.Id}, AegisName: {item.AegisName}, Name: {item.Name}");
+                    }
+                    Console.WriteLine("... (更多物品已加载)");
+                }
+            }
+            catch (Exception ex)
+            {
+                string errorMessage = $"加载文件失败:\n\n错误类型: {ex.GetType().Name}\n错误信息: {ex.Message}";
+
+                if (ex.InnerException != null)
+                {
+                    errorMessage += $"\n内部错误: {ex.InnerException.Message}";
+                }
+
+                MessageBox.Show(errorMessage, "加载错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+                toolStripStatusLabel.Text = "加载失败";
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
+            }
+        }
+
+        private string GetDatabasePathFromSettings()
+        {
+            string settingsPath = Path.Combine(Application.StartupPath, "editor_settings.config");
+
+            if (!File.Exists(settingsPath))
+                return null;
+
+            try
+            {
+                var lines = File.ReadAllLines(settingsPath);
+                foreach (var line in lines)
+                {
+                    var parts = line.Split('=');
+                    if (parts.Length == 2 && parts[0] == "DatabasePath")
+                    {
+                        return parts[1];
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"读取设置文件失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private void LoadAllItemFiles(string databasePath)
+        {
+            _currentItems.Clear();
+            _currentFilePaths.Clear();
+            _dataService.ClearData();
+
+            string mainFilePath = Path.Combine(databasePath, "item_db.yml");
+
+            Console.WriteLine($"数据库路径: {databasePath}");
+            Console.WriteLine($"主文件路径: {mainFilePath}");
+            Console.WriteLine($"主文件存在: {File.Exists(mainFilePath)}");
+
+            if (!File.Exists(mainFilePath))
+            {
+                MessageBox.Show($"找不到主文件: {mainFilePath}", "错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            try
+            {
+                Encoding encoding = GetEncodingFromSettings();
+
+                // 先诊断YAML结构
+                DiagnoseYamlStructure(mainFilePath);
+
+                // 尝试使用新的结构化加载方法
+                var (mainItems, importPaths) = _dataService.LoadStructuredFile(mainFilePath, encoding);
+
+                if (mainItems.Count > 0)
+                {
+                    // 主文件包含物品，添加到当前列表
+                    _currentItems.AddRange(mainItems);
+                    _currentFilePaths.Add(mainFilePath);
+                    Console.WriteLine($"从主文件加载了 {mainItems.Count} 个物品");
+                }
+                else
+                {
+                    Console.WriteLine("主文件不包含物品数据，仅包含导入配置");
+                    // 不将主文件添加到文件路径列表，因为它不包含实际物品
+                }
+
+                // 加载导入文件
+                int totalImportItems = 0;
+                foreach (var importPath in importPaths)
+                {
+                    string fullImportPath = ResolveImportPath(importPath, databasePath);
+                    if (File.Exists(fullImportPath))
+                    {
+                        var importItems = _dataService.LoadFromFile(fullImportPath, encoding);
+                        _currentItems.AddRange(importItems);
+                        _currentFilePaths.Add(fullImportPath);
+                        totalImportItems += importItems.Count;
+                        Console.WriteLine($"从导入文件 {fullImportPath} 加载了 {importItems.Count} 个物品");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"导入文件不存在: {fullImportPath}");
+                    }
+                }
+
+                Console.WriteLine($"从导入文件总共加载了 {totalImportItems} 个物品");
+
+                // 更新数据网格
+                UpdateDataGridView();
+
+                // 更新状态栏
+                toolStripStatusLabel.Text = $"已加载 {_currentItems.Count} 个物品，来自 {_currentFilePaths.Count} 个文件";
+
+                Console.WriteLine($"最终加载物品数: {_currentItems.Count}");
+                Console.WriteLine($"加载文件数: {_currentFilePaths.Count}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"加载失败: {ex.Message}");
+                MessageBox.Show($"加载文件失败: {ex.Message}", "错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void UpdateDataGridView()
+        {
+            // 确保在UI线程上执行
+            if (dataGridView.InvokeRequired)
+            {
+                dataGridView.Invoke(new Action(UpdateDataGridView));
+                return;
+            }
+
+            // 保存当前选择状态（如果有）
+            int selectedIndex = dataGridView.CurrentRow?.Index ?? -1;
+
+            // 暂停绘制以提高性能
+            dataGridView.SuspendLayout();
+
+            try
+            {
+                // 重新绑定数据源
+                dataGridView.DataSource = null;
+                dataGridView.DataSource = new BindingList<Item>(_currentItems);
+
+                // 恢复选择状态（如果有）
+                if (selectedIndex >= 0 && selectedIndex < dataGridView.Rows.Count)
+                {
+                    dataGridView.Rows[selectedIndex].Selected = true;
+                    dataGridView.FirstDisplayedScrollingRowIndex = selectedIndex;
+                }
+
+                // 更新状态栏
+                toolStripStatusLabel.Text = $"已加载 {_currentItems.Count} 个物品";
+
+                Console.WriteLine($"数据网格已更新，显示 {_currentItems.Count} 个物品");
+            }
+            finally
+            {
+                // 恢复绘制
+                dataGridView.ResumeLayout();
+            }
+        }
+
+        private void ParseFooterAndImports(YamlDotNet.RepresentationModel.YamlNode rootNode, string databasePath)
+        {
+            try
+            {
+                if (rootNode is YamlDotNet.RepresentationModel.YamlMappingNode mappingNode)
+                {
+                    Console.WriteLine("开始解析Footer和Imports...");
+
+                    // 检查Body是否存在
+                    var bodyKey = new YamlDotNet.RepresentationModel.YamlScalarNode("Body");
+                    bool hasBody = mappingNode.Children.ContainsKey(bodyKey);
+                    Console.WriteLine($"Body存在: {hasBody}");
+
+                    var footerKey = new YamlDotNet.RepresentationModel.YamlScalarNode("Footer");
+                    if (mappingNode.Children.ContainsKey(footerKey))
+                    {
+                        Console.WriteLine("找到Footer节点");
+                        var footerNode = mappingNode.Children[footerKey];
+
+                        if (footerNode is YamlDotNet.RepresentationModel.YamlMappingNode footerMapping)
+                        {
+                            var importsKey = new YamlDotNet.RepresentationModel.YamlScalarNode("Imports");
+                            if (footerMapping.Children.ContainsKey(importsKey))
+                            {
+                                var importsNode = footerMapping.Children[importsKey];
+
+                                if (importsNode is YamlDotNet.RepresentationModel.YamlSequenceNode importsSequence)
+                                {
+                                    Console.WriteLine($"找到 {importsSequence.Children.Count} 个导入项");
+
+                                    foreach (var importItem in importsSequence.Children)
+                                    {
+                                        if (importItem is YamlDotNet.RepresentationModel.YamlMappingNode importMapping)
+                                        {
+                                            var pathKey = new YamlDotNet.RepresentationModel.YamlScalarNode("Path");
+                                            if (importMapping.Children.ContainsKey(pathKey))
+                                            {
+                                                var pathNode = importMapping.Children[pathKey];
+                                                string importPath = pathNode.ToString();
+
+                                                string fullImportPath = ResolveImportPath(importPath, databasePath);
+
+                                                Console.WriteLine($"导入路径: {importPath} -> {fullImportPath}");
+                                                Console.WriteLine($"文件存在: {File.Exists(fullImportPath)}");
+
+                                                if (File.Exists(fullImportPath))
+                                                {
+                                                    // 检查是否已经加载过（避免重复）
+                                                    if (!_currentFilePaths.Contains(fullImportPath))
+                                                    {
+                                                        LoadItemsFromFile(fullImportPath);
+                                                        _currentFilePaths.Add(fullImportPath);
+                                                        Console.WriteLine($"成功加载导入文件: {fullImportPath}");
+                                                    }
+                                                    else
+                                                    {
+                                                        Console.WriteLine($"文件已加载，跳过: {fullImportPath}");
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    Console.WriteLine($"导入文件不存在: {fullImportPath}");
+                                                    TryAlternativePaths(importPath, databasePath);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("未找到Footer节点");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"解析Footer和Imports时出错: {ex.Message}");
+            }
+        }
+
+        private void DiagnoseYamlStructure(string filePath)
+        {
+            try
+            {
+                Console.WriteLine($"=== 诊断YAML结构: {filePath} ===");
+                var yamlContent = File.ReadAllText(filePath, Encoding.UTF8);
+
+                using (var reader = new StringReader(yamlContent))
+                {
+                    var yamlStream = new YamlDotNet.RepresentationModel.YamlStream();
+                    yamlStream.Load(reader);
+
+                    if (yamlStream.Documents.Count > 0)
+                    {
+                        var rootNode = yamlStream.Documents[0].RootNode;
+                        DiagnoseYamlNode(rootNode, 0);
+                    }
+                }
+                Console.WriteLine("=== 诊断结束 ===");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"诊断失败: {ex.Message}");
+            }
+        }
+
+        private void DiagnoseYamlNode(YamlDotNet.RepresentationModel.YamlNode node, int depth)
+        {
+            var indent = new string(' ', depth * 2);
+
+            if (node is YamlDotNet.RepresentationModel.YamlScalarNode scalarNode)
+            {
+                Console.WriteLine($"{indent}标量: {scalarNode.Value}");
+            }
+            else if (node is YamlDotNet.RepresentationModel.YamlMappingNode mappingNode)
+            {
+                Console.WriteLine($"{indent}映射 (子节点数: {mappingNode.Children.Count}):");
+                foreach (var child in mappingNode.Children)
+                {
+                    var key = (YamlDotNet.RepresentationModel.YamlScalarNode)child.Key;
+                    Console.WriteLine($"{indent}  键: {key.Value}");
+                    DiagnoseYamlNode(child.Value, depth + 2);
+                }
+            }
+            else if (node is YamlDotNet.RepresentationModel.YamlSequenceNode sequenceNode)
+            {
+                Console.WriteLine($"{indent}序列 (项数: {sequenceNode.Children.Count}):");
+                int index = 0;
+                foreach (var child in sequenceNode.Children)
+                {
+                    Console.WriteLine($"{indent}  项[{index}]:");
+                    DiagnoseYamlNode(child, depth + 2);
+                    index++;
                 }
             }
         }
 
-
-        private void OpenButton_Click(object sender, EventArgs e)
+        private string ResolveImportPath(string importPath, string databasePath)
         {
-            using (var dialog = new OpenFileDialog())
+            // 如果已经是绝对路径，直接返回
+            if (Path.IsPathRooted(importPath))
+                return importPath;
+
+            // 方案1：直接组合（当前逻辑）
+            string path1 = Path.Combine(databasePath, importPath);
+            if (File.Exists(path1))
+                return path1;
+
+            // 方案2：从databasePath的父目录开始组合（处理db/re/item_db.yml情况）
+            string parentPath = Directory.GetParent(databasePath)?.FullName;
+            if (parentPath != null)
             {
-                dialog.Filter = "YAML文件|*.yaml;*.yml|所有文件|*.*";
-                if (dialog.ShowDialog() == DialogResult.OK)
+                string path2 = Path.Combine(parentPath, importPath);
+                if (File.Exists(path2))
+                    return path2;
+            }
+
+            // 方案3：从项目根目录开始（假设databasePath是子目录）
+            string projectRoot = FindProjectRoot(databasePath);
+            if (projectRoot != null)
+            {
+                string path3 = Path.Combine(projectRoot, importPath);
+                if (File.Exists(path3))
+                    return path3;
+            }
+
+            // 方案4：只使用文件名，在databasePath中查找
+            string fileName = Path.GetFileName(importPath);
+            if (!string.IsNullOrEmpty(fileName))
+            {
+                string path4 = Path.Combine(databasePath, fileName);
+                if (File.Exists(path4))
+                    return path4;
+            }
+
+            // 默认返回方案1（即使文件不存在）
+            return path1;
+        }
+
+        private string FindProjectRoot(string currentPath)
+        {
+            try
+            {
+                DirectoryInfo dir = new DirectoryInfo(currentPath);
+                while (dir != null)
                 {
-                    try
+                    // 查找包含 db 目录的根目录
+                    if (Directory.Exists(Path.Combine(dir.FullName, "db")))
+                        return dir.FullName;
+
+                    dir = dir.Parent;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"查找项目根目录失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private void TryAlternativePaths(string importPath, string databasePath)
+        {
+            Console.WriteLine("尝试替代路径...");
+
+            // 只使用文件名搜索
+            string fileName = Path.GetFileName(importPath);
+            if (!string.IsNullOrEmpty(fileName))
+            {
+                // 在当前数据库路径搜索
+                string[] files = Directory.GetFiles(databasePath, fileName, SearchOption.AllDirectories);
+                foreach (string file in files.Take(3)) // 只显示前3个结果
+                {
+                    Console.WriteLine($"找到可能文件: {file}");
+                }
+
+                if (files.Length > 0)
+                {
+                    Console.WriteLine($"建议使用: {files[0]}");
+                }
+            }
+
+            // 显示目录结构用于诊断
+            Console.WriteLine("当前数据库路径内容:");
+            try
+            {
+                var dirs = Directory.GetDirectories(databasePath);
+                var files = Directory.GetFiles(databasePath);
+
+                Console.WriteLine("目录:");
+                foreach (var dir in dirs.Take(5))
+                {
+                    Console.WriteLine($"  {Path.GetFileName(dir)}");
+                }
+
+                Console.WriteLine("文件:");
+                foreach (var file in files.Take(5))
+                {
+                    Console.WriteLine($"  {Path.GetFileName(file)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"无法读取目录内容: {ex.Message}");
+            }
+        }
+
+        private void LoadItemsFromFile(string filePath)
+        {
+            try
+            {
+                // 从设置文件获取编码
+                Encoding encoding = GetEncodingFromSettings();
+
+                var items = _dataService.LoadFromFile(filePath, encoding);
+                _currentItems.AddRange(items);
+
+                Console.WriteLine($"从 {filePath} 加载了 {items.Count} 个物品，使用编码: {encoding.EncodingName}");
+                UpdateDataGridView();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"加载文件 {filePath} 失败: {ex.Message}");
+                MessageBox.Show($"加载文件 {filePath} 失败: {ex.Message}", "错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private Encoding GetEncodingFromSettings()
+        {
+            string settingsPath = Path.Combine(Application.StartupPath, "editor_settings.config");
+
+            if (!File.Exists(settingsPath))
+                return Encoding.UTF8; // 默认使用UTF-8
+
+            try
+            {
+                var lines = File.ReadAllLines(settingsPath);
+                foreach (var line in lines)
+                {
+                    var parts = line.Split('=');
+                    if (parts.Length == 2 && parts[0] == "Encoding")
                     {
-                        Cursor = Cursors.WaitCursor;
-
-                        // 记录当前文件路径
-                        _currentFilePath = dialog.FileName;
-
-                        _dataService.LoadData(dialog.FileName);
-                        _currentItems = _dataService.GetItems();
-
-                        dataGridView.DataSource = new BindingList<Item>(_currentItems);
-
-                        // 更新筛选下拉框
-                        UpdateFilterComboBoxes();
-
-                        // 刷新数据网格显示
-                        dataGridView.Refresh();
-
-                        toolStripStatusLabel.Text = $"成功加载 {_currentItems.Count} 个物品";
-                        MessageBox.Show($"成功加载 {_currentItems.Count} 个物品", "成功",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                        // 调试信息
-                        if (_currentItems.Count > 0)
+                        if (int.TryParse(parts[1], out int encodingIndex))
                         {
-                            Console.WriteLine("=== 加载的物品详情 ===");
-                            foreach (var item in _currentItems.Take(5))
-                            {
-                                Console.WriteLine($"ID: {item.Id}, AegisName: {item.AegisName}, Name: {item.Name}");
-                            }
-                            Console.WriteLine("... (更多物品已加载)");
+                            return GetEncodingFromIndex(encodingIndex);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        string errorMessage = $"加载文件失败:\n\n错误类型: {ex.GetType().Name}\n错误信息: {ex.Message}";
-
-                        if (ex.InnerException != null)
-                        {
-                            errorMessage += $"\n内部错误: {ex.InnerException.Message}";
-                        }
-
-                        MessageBox.Show(errorMessage, "加载错误",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
-
-                        toolStripStatusLabel.Text = "加载失败";
-                    }
-                    finally
-                    {
-                        Cursor = Cursors.Default;
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"读取编码设置失败: {ex.Message}");
+            }
+
+            return Encoding.UTF8; // 默认使用UTF-8
+        }
+
+        private Encoding GetEncodingFromIndex(int index)
+        {
+            switch (index)
+            {
+                case 0: return Encoding.UTF8;
+                case 1: return new UTF8Encoding(true);
+                case 2: return Encoding.GetEncoding("GB2312");
+                case 3: return Encoding.GetEncoding("GBK");
+                case 4: return Encoding.GetEncoding("GB18030");
+                default: return Encoding.UTF8;
+            }
+        }
+
+        private void DebugButton_Click(object sender, EventArgs e)
+        {
+            // 从设置文件获取数据库路径
+            string databasePath = GetDatabasePathFromSettings();
+
+            if (string.IsNullOrEmpty(databasePath) || !Directory.Exists(databasePath))
+            {
+                MessageBox.Show("数据库路径未设置或不存在，请先配置系统设置", "错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            string mainFilePath = Path.Combine(databasePath, "item_db.yml");
+
+            if (!File.Exists(mainFilePath))
+            {
+                MessageBox.Show($"找不到主文件: {mainFilePath}", "错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            DebugService.AnalyzeYamlStructure(mainFilePath);
+            DebugService.TestYamlParsing(mainFilePath);
         }
 
         // 修复数据网格设置
@@ -328,62 +796,6 @@ namespace YamlDataEditor.Forms
                 ReadOnly = true
             };
             dataGridView.Columns.Add(column);
-        }
-
-        private void SaveButton_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                // 获取当前显示的项目列表
-                var items = _dataService.GetItems();
-                if (items == null || items.Count == 0)
-                {
-                    MessageBox.Show("没有数据可保存", "提示",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                string filePath = _currentFilePath;
-
-                // 如果没有当前文件路径，显示另存为对话框
-                if (string.IsNullOrEmpty(filePath))
-                {
-                    using (var dialog = new SaveFileDialog())
-                    {
-                        dialog.Filter = "YAML文件|*.yaml;*.yml|所有文件|*.*";
-                        dialog.DefaultExt = "yaml";
-
-                        if (dialog.ShowDialog() == DialogResult.OK)
-                        {
-                            filePath = dialog.FileName;
-                            _currentFilePath = filePath; // 记录新的文件路径
-                        }
-                        else
-                        {
-                            return; // 用户取消了保存
-                        }
-                    }
-                }
-
-                // 执行保存
-                _dataService.SaveData(filePath);
-                MessageBox.Show("保存成功", "成功",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                toolStripStatusLabel.Text = $"文件已保存到: {Path.GetFileName(filePath)}";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"保存文件失败: {ex.Message}", "错误",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                toolStripStatusLabel.Text = "保存失败";
-            }
-        }
-
-        private void SaveAsButton_Click(object sender, EventArgs e)
-        {
-            // 直接调用SaveButton_Click，因为逻辑相同
-            SaveButton_Click(sender, e);
         }
 
         private void AddButton_Click(object sender, EventArgs e)
@@ -451,12 +863,38 @@ namespace YamlDataEditor.Forms
         {
             try
             {
-                _currentItems = _dataService.FilterItems(
-                    txtSearch.Text.Trim(),
-                    cmbType.SelectedItem?.ToString(),
-                    cmbSubType.SelectedItem?.ToString());
+                string searchText = txtSearch.Text.Trim();
 
+                // 处理类型筛选
+                string typeFilter = null;
+                if (cmbType.SelectedIndex > 0) // 0是"选择类型"，不筛选
+                {
+                    typeFilter = cmbType.SelectedItem?.ToString();
+                    // 如果选择的是"全部"，则设置为空
+                    if (typeFilter == "全部")
+                        typeFilter = null;
+                }
+
+                // 处理子类型筛选
+                string subTypeFilter = null;
+                if (cmbSubType.SelectedIndex > 0) // 0是"选择子类型"，不筛选
+                {
+                    subTypeFilter = cmbSubType.SelectedItem?.ToString();
+                    if (subTypeFilter == "全部")
+                        subTypeFilter = null;
+                }
+
+                Console.WriteLine($"应用筛选: 搜索='{searchText}', 类型='{typeFilter}', 子类型='{subTypeFilter}'");
+
+                _currentItems = _dataService.FilterItems(searchText, typeFilter, subTypeFilter);
+
+                // 更新数据网格
                 dataGridView.DataSource = new BindingList<Item>(_currentItems);
+
+                // 更新状态栏
+                toolStripStatusLabel.Text = $"显示 {_currentItems.Count} 个物品（已筛选）";
+
+                Console.WriteLine($"筛选完成: 显示 {_currentItems.Count} 个物品");
             }
             catch (Exception ex)
             {
@@ -468,11 +906,19 @@ namespace YamlDataEditor.Forms
         private void ClearFilter()
         {
             txtSearch.Text = string.Empty;
-            cmbType.SelectedIndex = 0;
-            cmbSubType.SelectedIndex = 0;
 
+            // 重置为提示文本
+            cmbType.SelectedIndex = 0; // "选择类型"
+            cmbSubType.SelectedIndex = 0; // "选择子类型"
+
+            // 重新加载所有物品
             _currentItems = _dataService.GetItems();
             dataGridView.DataSource = new BindingList<Item>(_currentItems);
+
+            // 更新状态栏
+            toolStripStatusLabel.Text = $"显示所有 {_currentItems.Count} 个物品";
+
+            Console.WriteLine("筛选已清除");
         }
 
         private void UpdateFilterComboBoxes()
@@ -480,22 +926,62 @@ namespace YamlDataEditor.Forms
             var currentType = cmbType.SelectedItem?.ToString();
             var currentSubType = cmbSubType.SelectedItem?.ToString();
 
+            // 保存当前是否选择了提示文本
+            bool wasTypeHint = currentType == "选择类型" || currentType == "全部";
+            bool wasSubTypeHint = currentSubType == "选择子类型" || currentSubType == "全部";
+
+            // 获取筛选数据
+            var typeFilters = _dataService.GetTypeFilters();
+            var subTypeFilters = _dataService.GetSubTypeFilters();
+
+            // 更新类型下拉框
             cmbType.Items.Clear();
-            cmbType.Items.AddRange(_dataService.GetTypeFilters().ToArray());
 
+            // 添加提示文本选项
+            cmbType.Items.Add("选择类型");
+
+            // 添加筛选数据
+            cmbType.Items.AddRange(typeFilters.ToArray());
+
+            // 更新子类型下拉框
             cmbSubType.Items.Clear();
-            cmbSubType.Items.AddRange(_dataService.GetSubTypeFilters().ToArray());
 
-            // 尝试恢复之前的选择
-            if (!string.IsNullOrEmpty(currentType))
+            // 添加提示文本选项
+            cmbSubType.Items.Add("选择子类型");
+
+            // 添加筛选数据
+            cmbSubType.Items.AddRange(subTypeFilters.ToArray());
+
+            // 恢复选择状态
+            if (!string.IsNullOrEmpty(currentType) && cmbType.Items.Contains(currentType))
+            {
                 cmbType.SelectedItem = currentType;
-            else
+            }
+            else if (wasTypeHint || typeFilters.Count == 0)
+            {
+                // 如果之前选择的是提示文本，或者没有数据，选择提示文本
                 cmbType.SelectedIndex = 0;
-
-            if (!string.IsNullOrEmpty(currentSubType))
-                cmbSubType.SelectedItem = currentSubType;
+            }
             else
+            {
+                // 否则选择第一个实际的数据项
+                cmbType.SelectedIndex = 1; // 跳过提示文本
+            }
+
+            if (!string.IsNullOrEmpty(currentSubType) && cmbSubType.Items.Contains(currentSubType))
+            {
+                cmbSubType.SelectedItem = currentSubType;
+            }
+            else if (wasSubTypeHint || subTypeFilters.Count == 0)
+            {
                 cmbSubType.SelectedIndex = 0;
+            }
+            else
+            {
+                cmbSubType.SelectedIndex = 1;
+            }
+
+            Console.WriteLine($"更新筛选下拉框完成: 类型项数={cmbType.Items.Count}, 子类型项数={cmbSubType.Items.Count}");
         }
     }
 }
